@@ -16,3 +16,5 @@ aux/
 .env
 
 docker-compose.yml
+
+docs/

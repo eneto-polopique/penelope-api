@@ -7,10 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from api.routers import wovens, pantone
+from api.routers import wovens, pantone, filters
 from api.config import get_settings
 from api.database import engine
-from api.models import Base
+from api.models import Base, WovenInfo, VariantInfo, StockInfo, PantoneColor
 
 settings = get_settings()
 
@@ -38,8 +38,8 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="Penelope Dataset API",
-    description="API for accessing woven fabric and Pantone color data",
-    version="1.0.0",
+    description="API for accessing woven fabric, variant, stock and Pantone color data",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -69,6 +69,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(wovens.router)
 app.include_router(pantone.router)
+app.include_router(filters.router)
 
 
 @app.get("/", tags=["Root"])
@@ -76,15 +77,27 @@ async def root():
     """Root endpoint with API information."""
     return {
         "name": "Penelope Dataset API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "endpoints": {
             "wovens": {
-                "list": "GET /wovens",
-                "detail": "GET /wovens/{id}"
+                "list": "GET /wovens"
+            },
+            "variants": {
+                "list": "GET /variants",
+                "detail": "GET /variants/{id}"
+            },
+            "stock": {
+                "list": "GET /stock"
             },
             "pantone_colors": {
                 "list": "GET /pantone-colors",
                 "detail": "GET /pantone-colors/detail?name={name}"
+            },
+            "filters": {
+                "colors": "GET /filters/colors",
+                "categories": "GET /filters/categories",
+                "references": "GET /filters/references",
+                "draws": "GET /filters/draws"
             }
         },
         "docs": "/docs",
@@ -95,12 +108,30 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
+    from sqlalchemy.orm import Session
+    from api.database import SessionLocal
+    
     try:
-        with engine.connect() as conn:
+        db = SessionLocal()
+        try:
+            # Get counts for each table
+            woven_count = db.query(WovenInfo).count()
+            variant_count = db.query(VariantInfo).count()
+            stock_count = db.query(StockInfo).count()
+            pantone_count = db.query(PantoneColor).count()
+            
             return {
                 "status": "healthy",
-                "database": "connected"
+                "database": "connected",
+                "tables": {
+                    "woven_info": woven_count,
+                    "variant_info": variant_count,
+                    "stock_info": stock_count,
+                    "pantone_colors": pantone_count
+                }
             }
+        finally:
+            db.close()
     except Exception as e:
         return {
             "status": "unhealthy",
