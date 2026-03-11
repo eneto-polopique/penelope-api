@@ -333,6 +333,8 @@ def list_stock(
     perfect_match: Optional[bool] = Query(None, description="Filter by perfect match status"),
     min_quantity: Optional[float] = Query(None, description="Minimum stock quantity"),
     description: Optional[str] = Query(None, description="Filter by description (partial match, case-insensitive)"),
+    reference: Optional[str] = Query(None, description="Filter by woven reference (partial match, case-insensitive)"),
+    draw: Optional[str] = Query(None, description="Filter by draw pattern (partial match, case-insensitive)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -344,14 +346,20 @@ def list_stock(
     - **perfect_match**: Filter by perfect match status
     - **min_quantity**: Minimum stock quantity
     - **description**: Filter by description (partial match, case-insensitive)
+    - **reference**: Filter by woven reference (partial match, case-insensitive)
+    - **draw**: Filter by draw pattern (partial match, case-insensitive)
     """
     # Set default and max page size
     if page_size is None:
         page_size = settings.default_page_size
     page_size = min(page_size, settings.max_page_size)
     
-    # Build query with filters
+    # Build query with filters - join with variant and woven if needed
     query = db.query(StockInfo)
+    
+    # Join with variant and woven tables if reference or draw filters are provided
+    if reference or draw:
+        query = query.join(VariantInfo).join(WovenInfo)
     
     if variant_id is not None:
         query = query.filter(StockInfo.variant_id == variant_id)
@@ -364,6 +372,12 @@ def list_stock(
     
     if description:
         query = query.filter(StockInfo.description.ilike(f"%{description}%"))
+    
+    if reference:
+        query = query.filter(WovenInfo.reference.ilike(f"%{reference}%"))
+    
+    if draw:
+        query = query.filter(WovenInfo.draw.ilike(f"%{draw}%"))
     
     # Get total count
     total = query.count()
@@ -384,6 +398,7 @@ def list_stock(
             id=stock.variant.id,
             variant_ref=stock.variant.variant_ref,
             reference=stock.variant.woven.reference if stock.variant.woven else None,
+            draw=stock.variant.woven.draw if stock.variant.woven else None,
             category=stock.variant.category,
             thumbnail=stock.variant.thumbnail
         ) if stock.variant else None

@@ -125,6 +125,7 @@ class VariantInStock(BaseModel):
     variant_ref: str
     reference: Optional[str] = None
     category: Optional[str] = None
+    draw: Optional[str] = None
     thumbnail: Optional[str] = None
 
 

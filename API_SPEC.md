@@ -357,6 +357,8 @@ curl "http://localhost:8000/variants/153896"
 | `perfect_match` | boolean | No | - | Filter by perfect match status |
 | `min_quantity` | float | No | - | Minimum stock quantity |
 | `description` | string | No | - | Filter by description (partial match, case-insensitive) |
+| `reference` | string | No | - | Filter by woven reference (partial match, case-insensitive) |
+| `draw` | string | No | - | Filter by draw pattern (partial match, case-insensitive) |
 
 **Response:** `200 OK`
 
@@ -417,8 +419,17 @@ curl "http://localhost:8000/stock?min_quantity=50"
 # Search by description
 curl "http://localhost:8000/stock?description=PR239"
 
+# Filter by woven reference
+curl "http://localhost:8000/stock?reference=4612"
+
+# Filter by draw pattern
+curl "http://localhost:8000/stock?draw=W339"
+
 # Combined: perfect matches with 100+ quantity
 curl "http://localhost:8000/stock?perfect_match=true&min_quantity=100"
+
+# Get all stock for variants with specific reference and draw
+curl "http://localhost:8000/stock?reference=4612&draw=W339"
 ```
 
 **UI Flow:**
