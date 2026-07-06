@@ -357,6 +357,8 @@ curl "http://localhost:8000/variants/153896"
 | `perfect_match` | boolean | No | - | Filter by perfect match status |
 | `min_quantity` | float | No | - | Minimum stock quantity |
 | `description` | string | No | - | Filter by description (partial match, case-insensitive) |
+| `color_name` | string[] | No | - | Filter by variant color name(s) - must have ALL specified colors (case-insensitive) |
+| `category` | string | No | - | Filter by variant category (partial match, case-insensitive) |
 | `reference` | string | No | - | Filter by woven reference (partial match, case-insensitive) |
 | `draw` | string | No | - | Filter by draw pattern (partial match, case-insensitive) |
 
@@ -419,6 +421,15 @@ curl "http://localhost:8000/stock?min_quantity=50"
 # Search by description
 curl "http://localhost:8000/stock?description=PR239"
 
+# Filter by variant category
+curl "http://localhost:8000/stock?category=Xadrez"
+
+# Filter by variant color
+curl "http://localhost:8000/stock?color_name=white"
+
+# Filter by variants that contain ALL specified colors
+curl "http://localhost:8000/stock?color_name=white&color_name=blue"
+
 # Filter by woven reference
 curl "http://localhost:8000/stock?reference=4612"
 
@@ -430,6 +441,9 @@ curl "http://localhost:8000/stock?perfect_match=true&min_quantity=100"
 
 # Get all stock for variants with specific reference and draw
 curl "http://localhost:8000/stock?reference=4612&draw=W339"
+
+# Combined: category + color + woven filters
+curl "http://localhost:8000/stock?category=Xadrez&color_name=white&reference=TC%20P006A"
 ```
 
 **UI Flow:**

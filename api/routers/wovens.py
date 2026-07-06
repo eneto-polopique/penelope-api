@@ -333,6 +333,8 @@ def list_stock(
     perfect_match: Optional[bool] = Query(None, description="Filter by perfect match status"),
     min_quantity: Optional[float] = Query(None, description="Minimum stock quantity"),
     description: Optional[str] = Query(None, description="Filter by description (partial match, case-insensitive)"),
+    color_name: Optional[List[str]] = Query(None, description="Filter by color name(s) - must have ALL specified colors"),
+    category: Optional[str] = Query(None, description="Filter by category (case-insensitive, partial match)"),
     reference: Optional[str] = Query(None, description="Filter by woven reference (partial match, case-insensitive)"),
     draw: Optional[str] = Query(None, description="Filter by draw pattern (partial match, case-insensitive)"),
     db: Session = Depends(get_db)
@@ -346,6 +348,8 @@ def list_stock(
     - **perfect_match**: Filter by perfect match status
     - **min_quantity**: Minimum stock quantity
     - **description**: Filter by description (partial match, case-insensitive)
+    - **color_name**: Filter by color name(s) (case-insensitive, must have ALL specified colors)
+    - **category**: Filter by category (case-insensitive, partial match)
     - **reference**: Filter by woven reference (partial match, case-insensitive)
     - **draw**: Filter by draw pattern (partial match, case-insensitive)
     """
@@ -357,8 +361,8 @@ def list_stock(
     # Build query with filters - join with variant and woven if needed
     query = db.query(StockInfo)
     
-    # Join with variant and woven tables if reference or draw filters are provided
-    if reference or draw:
+    # Join with variant and woven tables if variant/woven filters are provided
+    if color_name or category or reference or draw:
         query = query.join(VariantInfo).join(WovenInfo)
     
     if variant_id is not None:
@@ -372,6 +376,14 @@ def list_stock(
     
     if description:
         query = query.filter(StockInfo.description.ilike(f"%{description}%"))
+
+    if color_name:
+        # AND condition: variant must contain all requested colors
+        for color in color_name:
+            query = query.filter(VariantInfo.color_name.any(color.lower()))
+
+    if category:
+        query = query.filter(VariantInfo.category.ilike(f"%{category}%"))
     
     if reference:
         query = query.filter(WovenInfo.reference.ilike(f"%{reference}%"))
