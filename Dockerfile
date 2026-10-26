@@ -14,7 +14,11 @@ COPY pyproject.toml ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir --upgrade \
+        "pg8000>=1.31.5" \
+        "scramp>=1.4.8" \
+        "psycopg>=3.3.2"
 
 
 # Final stage

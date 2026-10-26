@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pg8000>=1.31.5",
+    "scramp>=1.4.8",
     "psycopg>=3.3.2",
     "sqlalchemy>=2.0.45",
     "fastapi>=0.115.0",

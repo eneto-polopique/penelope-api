@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     db_name: str
     db_user: str
     db_password: str
+    db_driver: str = "psycopg"
     
     # API settings
     api_host: str = "0.0.0.0"
@@ -37,7 +38,7 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Construct database URL from settings."""
-        return f"postgresql+pg8000://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+{self.db_driver}://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
 
 @lru_cache()

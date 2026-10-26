@@ -961,3 +961,12 @@ The API logs one line per request with:
 - DB query count
 
 These logs are emitted to stdout and are visible in Docker logs.
+
+### Database Driver
+
+Set `DB_DRIVER` to choose SQLAlchemy Postgres driver.
+
+- `psycopg` (default, recommended)
+- `pg8000` (requires compatible `scramp` package)
+
+If you encounter `AttributeError: module 'scramp' has no attribute 'make_channel_binding'`, use `DB_DRIVER=psycopg` or update `scramp`.

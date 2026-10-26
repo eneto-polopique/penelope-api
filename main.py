@@ -34,6 +34,38 @@ async def lifespan(app: FastAPI):
     Application lifespan handler.
     Executes startup and shutdown logic.
     """
+    logger.info("Configured DB driver: %s", settings.db_driver)
+
+    # Startup: Verify driver compatibility before opening DB connections.
+    if settings.db_driver == "pg8000":
+        try:
+            import pg8000
+            import scramp
+
+            logger.info("pg8000 version: %s", getattr(pg8000, "__version__", "unknown"))
+            logger.info("scramp version: %s", getattr(scramp, "__version__", "unknown"))
+
+            if not hasattr(scramp, "make_channel_binding"):
+                logger.error(
+                    "Incompatible scramp package detected for pg8000. "
+                    "Install a newer scramp version or set DB_DRIVER=psycopg."
+                )
+            else:
+                logger.info("pg8000/scramp compatibility check passed")
+        except Exception:
+            logger.exception(
+                "Failed to validate pg8000/scramp compatibility. "
+                "Consider setting DB_DRIVER=psycopg."
+            )
+
+    elif settings.db_driver == "psycopg":
+        try:
+            import psycopg
+
+            logger.info("psycopg version: %s", getattr(psycopg, "__version__", "unknown"))
+        except Exception:
+            logger.exception("Failed to load psycopg package")
+
     # Startup: Verify database connection
     try:
         with engine.connect() as conn:
