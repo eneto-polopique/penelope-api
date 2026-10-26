@@ -150,6 +150,11 @@ class StockListResponse(BaseModel):
     total_pages: int
 
 
+class StockQuantityUpdateRequest(BaseModel):
+    """Request schema to update stock quantity."""
+    quantity: float = Field(ge=0)
+
+
 # ==================== PANTONE COLOR SCHEMAS ====================
 
 class PantoneColorListItem(BaseModel):

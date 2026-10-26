@@ -2,6 +2,8 @@
 Main FastAPI application entry point.
 """
 
+import logging
+import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,10 +11,21 @@ from contextlib import asynccontextmanager
 
 from api.routers import wovens, pantone, filters
 from api.config import get_settings
-from api.database import engine
+from api.database import (
+    engine,
+    get_request_db_metrics,
+    reset_request_db_metrics,
+    start_request_db_metrics,
+)
 from api.models import Base, WovenInfo, VariantInfo, StockInfo, PantoneColor
 
 settings = get_settings()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("api")
 
 
 @asynccontextmanager
@@ -24,15 +37,15 @@ async def lifespan(app: FastAPI):
     # Startup: Verify database connection
     try:
         with engine.connect() as conn:
-            print("✓ Database connection established")
+            logger.info("Database connection established")
     except Exception as e:
-        print(f"✗ Database connection failed: {e}")
+        logger.exception("Database connection failed: %s", e)
     
     yield
     
     # Shutdown
     engine.dispose()
-    print("✓ Database connections closed")
+    logger.info("Database connections closed")
 
 
 # Create FastAPI application
@@ -51,6 +64,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_timing_middleware(request: Request, call_next):
+    """Log total request time and aggregated DB query time for each request."""
+    request_start = time.perf_counter()
+    metrics_token = start_request_db_metrics()
+
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        total_ms = (time.perf_counter() - request_start) * 1000
+        db_metrics = get_request_db_metrics()
+        status_code = response.status_code if response is not None else 500
+
+        logger.info(
+            "request_timing method=%s path=%s status=%s total_ms=%.2f db_query_ms=%.2f db_query_count=%d",
+            request.method,
+            request.url.path,
+            status_code,
+            total_ms,
+            db_metrics["query_time_ms"],
+            db_metrics["query_count"],
+        )
+
+        reset_request_db_metrics(metrics_token)
 
 
 # Global exception handler
@@ -87,7 +128,8 @@ async def root():
                 "detail": "GET /variants/{id}"
             },
             "stock": {
-                "list": "GET /stock"
+                "list": "GET /stock",
+                "update_quantity": "PATCH /stock/{stock_id}/quantity"
             },
             "pantone_colors": {
                 "list": "GET /pantone-colors",

@@ -2,10 +2,12 @@
 API router for woven, variant, and stock endpoints.
 """
 
+import secrets
+from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_, func, exists
+from sqlalchemy import exists
 import math
 
 from api.database import get_db
@@ -14,12 +16,21 @@ from api.schemas import (
     WovenListItem, WovenListResponse, VariantSummary,
     VariantListItem, VariantListResponse, VariantDetail,
     SimilarVariantItem, WovenSummary, YarnItem, StockItem,
-    StockListItem, StockListResponse, VariantInStock
+    StockListItem, StockListResponse, VariantInStock, StockQuantityUpdateRequest
 )
 from api.config import get_settings
 
 router = APIRouter(tags=["Wovens"])
 settings = get_settings()
+
+
+def _normalize_text_filter(value: Optional[str]) -> Optional[str]:
+    """Normalize user text filters by trimming and collapsing repeated spaces."""
+    if value is None:
+        return None
+
+    normalized = " ".join(value.split())
+    return normalized or None
 
 
 # ==================== WOVEN ENDPOINTS ====================
@@ -40,6 +51,9 @@ def list_wovens(
     - **reference**: Filter by reference code (partial match, case-insensitive)
     - **draw**: Filter by draw pattern (partial match, case-insensitive)
     """
+    reference = _normalize_text_filter(reference)
+    draw = _normalize_text_filter(draw)
+
     # Set default and max page size
     if page_size is None:
         page_size = settings.default_page_size
@@ -154,6 +168,10 @@ def list_variants(
     - **draw**: Filter by draw pattern (partial match)
     - **in_stock**: Filter by stock availability (true = has stock, false = no stock)
     """
+    category = _normalize_text_filter(category)
+    reference = _normalize_text_filter(reference)
+    draw = _normalize_text_filter(draw)
+
     # Set default and max page size
     if page_size is None:
         page_size = settings.default_page_size
@@ -165,7 +183,9 @@ def list_variants(
     if color_name:
         # Filter by color names (AND condition - must have ALL specified colors)
         for color in color_name:
-            query = query.filter(VariantInfo.color_name.any(color.lower()))
+            normalized_color = _normalize_text_filter(color)
+            if normalized_color:
+                query = query.filter(VariantInfo.color_name.any(normalized_color.lower()))
     
     if category:
         query = query.filter(VariantInfo.category.ilike(f"%{category}%"))
@@ -305,6 +325,7 @@ def get_variant(
             perfect_match=s.perfect_match or False
         )
         for s in variant.stock_entries
+        if s.quantity is not None and float(s.quantity) > 0
     ]
     
     return VariantDetail(
@@ -353,13 +374,18 @@ def list_stock(
     - **reference**: Filter by woven reference (partial match, case-insensitive)
     - **draw**: Filter by draw pattern (partial match, case-insensitive)
     """
+    description = _normalize_text_filter(description)
+    category = _normalize_text_filter(category)
+    reference = _normalize_text_filter(reference)
+    draw = _normalize_text_filter(draw)
+
     # Set default and max page size
     if page_size is None:
         page_size = settings.default_page_size
     page_size = min(page_size, settings.max_page_size)
     
     # Build query with filters - join with variant and woven if needed
-    query = db.query(StockInfo)
+    query = db.query(StockInfo).filter(StockInfo.quantity.is_not(None), StockInfo.quantity > 0)
     
     # Join with variant and woven tables if variant/woven filters are provided
     if color_name or category or reference or draw:
@@ -380,7 +406,9 @@ def list_stock(
     if color_name:
         # AND condition: variant must contain all requested colors
         for color in color_name:
-            query = query.filter(VariantInfo.color_name.any(color.lower()))
+            normalized_color = _normalize_text_filter(color)
+            if normalized_color:
+                query = query.filter(VariantInfo.color_name.any(normalized_color.lower()))
 
     if category:
         query = query.filter(VariantInfo.category.ilike(f"%{category}%"))
@@ -430,4 +458,53 @@ def list_stock(
         page=page,
         page_size=page_size,
         total_pages=total_pages
+    )
+
+
+@router.patch("/stock/{stock_id}/quantity", response_model=StockListItem)
+def update_stock_quantity(
+    stock_id: int,
+    payload: StockQuantityUpdateRequest,
+    x_pin: str = Header(..., alias="X-PIN", description="PIN configured via PIN environment variable"),
+    db: Session = Depends(get_db)
+):
+    """
+    Update stock quantity for a stock row.
+
+    Requires the `X-PIN` header to match the PIN configured in environment.
+    """
+    configured_pin = (settings.pin or "").strip()
+    if not configured_pin:
+        raise HTTPException(status_code=500, detail="PIN is not configured on server")
+
+    if not secrets.compare_digest(x_pin, configured_pin):
+        raise HTTPException(status_code=403, detail="Invalid PIN")
+
+    stock = db.query(StockInfo).options(
+        joinedload(StockInfo.variant).joinedload(VariantInfo.woven)
+    ).filter(StockInfo.id == stock_id).first()
+
+    if not stock:
+        raise HTTPException(status_code=404, detail=f"Stock with ID {stock_id} not found")
+
+    stock.quantity = Decimal(str(payload.quantity))
+    db.commit()
+    db.refresh(stock)
+
+    variant_info = VariantInStock(
+        id=stock.variant.id,
+        variant_ref=stock.variant.variant_ref,
+        reference=stock.variant.woven.reference if stock.variant.woven else None,
+        draw=stock.variant.woven.draw if stock.variant.woven else None,
+        category=stock.variant.category,
+        thumbnail=stock.variant.thumbnail
+    ) if stock.variant else None
+
+    return StockListItem(
+        id=stock.id,
+        variant_id=stock.variant_id,
+        description=stock.description,
+        quantity=float(stock.quantity) if stock.quantity else None,
+        perfect_match=stock.perfect_match or False,
+        variant=variant_info
     )

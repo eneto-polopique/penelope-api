@@ -347,6 +347,8 @@ curl "http://localhost:8000/variants/153896"
 
 **Use Case:** Inventory management - find available stock by variant, quantity, or match quality.
 
+**Important:** Items with `quantity <= 0` are not returned by this endpoint.
+
 **Query Parameters:**
 
 | Parameter | Type | Required | Default | Description |
@@ -361,6 +363,8 @@ curl "http://localhost:8000/variants/153896"
 | `category` | string | No | - | Filter by variant category (partial match, case-insensitive) |
 | `reference` | string | No | - | Filter by woven reference (partial match, case-insensitive) |
 | `draw` | string | No | - | Filter by draw pattern (partial match, case-insensitive) |
+
+**Filter Normalization:** Text filters trim leading/trailing spaces and collapse repeated internal spaces. For example, `reference=TC%20%20P006A` is normalized to `TC P006A`.
 
 **Response:** `200 OK`
 
@@ -433,6 +437,9 @@ curl "http://localhost:8000/stock?color_name=white&color_name=blue"
 # Filter by woven reference
 curl "http://localhost:8000/stock?reference=4612"
 
+# Filter by reference with spaces
+curl "http://localhost:8000/stock?reference=TC%20P006A"
+
 # Filter by draw pattern
 curl "http://localhost:8000/stock?draw=W339"
 
@@ -445,6 +452,55 @@ curl "http://localhost:8000/stock?reference=4612&draw=W339"
 # Combined: category + color + woven filters
 curl "http://localhost:8000/stock?category=Xadrez&color_name=white&reference=TC%20P006A"
 ```
+
+---
+
+### 4.1 Update Stock Quantity (PIN Protected)
+
+**Purpose:** Update quantity for a stock row.
+
+**Endpoint:** `PATCH /stock/{stock_id}/quantity`
+
+**Security:** Requires header `X-PIN` with the value configured in `PIN` environment variable.
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `stock_id` | integer | Yes | Stock ID to update |
+
+**Headers:**
+
+| Header | Type | Required | Description |
+|--------|------|----------|-------------|
+| `X-PIN` | string | Yes | PIN configured on server (`PIN` env var) |
+
+**Request Body:**
+
+```json
+{
+  "quantity": 12.5
+}
+```
+
+**Response:** `200 OK`
+
+Returns the updated stock item in the same shape as `GET /stock` items.
+
+**Example Request:**
+
+```bash
+curl -X PATCH "http://localhost:8000/stock/628/quantity" \
+  -H "Content-Type: application/json" \
+  -H "X-PIN: change_me" \
+  -d '{"quantity": 25.0}'
+```
+
+**Error Responses:**
+
+- `403 Forbidden`: Invalid PIN
+- `404 Not Found`: Stock ID does not exist
+- `500 Internal Server Error`: PIN not configured on server
 
 **UI Flow:**
 1. Display stock table with quantity, description, and variant info
@@ -746,7 +802,8 @@ curl "http://localhost:8000/pantone-colors/detail?name=PANTONE Red 032 C"
       "detail": "GET /variants/{id}"
     },
     "stock": {
-      "list": "GET /stock"
+      "list": "GET /stock",
+      "update_quantity": "PATCH /stock/{stock_id}/quantity"
     },
     "pantone_colors": {
       "list": "GET /pantone-colors",
@@ -888,3 +945,19 @@ In variant detail endpoint, yarns are automatically filtered to show only yarns 
 ### Stock Availability
 
 `has_stock` flag indicates whether ANY stock records exist for a variant, regardless of quantity. Use `min_quantity` filter on `/stock` endpoint for quantity-based filtering.
+
+`GET /stock` returns only rows with `quantity > 0`.
+
+### PIN Configuration
+
+To update stock quantity, set environment variable `PIN` and send it through `X-PIN` header in `PATCH /stock/{stock_id}/quantity`.
+
+### Request Timing Logs
+
+The API logs one line per request with:
+
+- total request duration
+- aggregated DB query duration
+- DB query count
+
+These logs are emitted to stdout and are visible in Docker logs.

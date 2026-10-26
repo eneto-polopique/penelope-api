@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Pagination settings
     default_page_size: int = 50
     max_page_size: int = 100
+
+    # Security
+    pin: str = ""
     
     model_config = SettingsConfigDict(
         env_file=".env",
